@@ -2,6 +2,12 @@
 
 A following of [Write yourself a Git!](https://wyag.thb.lt/#intro)
 
+## Command-Line Usage:
+
+```
+wyag init [path]
+```
+
 ## Chapters completed:
 
 - [x] 1. Introduction
@@ -23,7 +29,7 @@ A following of [Write yourself a Git!](https://wyag.thb.lt/#intro)
 - [ ] `checkout`
 - [ ] `commit`
 - [ ] `hash-object`
-- [ ] `init`
+- [x] `init`
 - [ ] `log`
 - [ ] `ls-files`
 - [ ] `ls-tree`

@@ -77,3 +77,180 @@ def main(argv=sys.argv[1:]):
         case "status"       : cmd_status(args)
         case "tag"          : cmd_tag(args)
         case _              : print("Bad command.")
+
+"""
+To create a new `Repository` object, we only need to make a few checks:
+- We must verify that the directory exists, and contains a subidrectory called `.git`.
+- We then read its configuration in `.git/config` (it's just an INI file) and check that
+`core.respositoryformatversion`is 0. More on that field in a moment.
+"""
+class GitRepository (object):
+    """A git repository"""
+
+    worktree = None
+    gitdir = None
+    conf = None
+
+    def __init__(self, path, force=False):
+        self.worktree = path
+        self.gitdir = os.path.join(path, ".git")
+
+        if not (force or os.path.isdir(self.gitdir)):
+            raise Exception(f"Not a Git repository {path}")
+
+        # Read configuration file in .git/config
+        self.conf = configparser.ConfigParser()
+        cf = repo_file(self, "config")
+
+        if cf and os.path.exists(cf):
+            self.conf.read([cf])
+        elif not force:
+            raise Exception("Configuration file missing")
+
+        if not force:
+            vers = int(self.conf.get("core", "repositoryformatversion"))
+            if vers != 0:
+                raise Exception(f"Unsupported repositoryformatversion: {vers}")
+
+"""
+(A note on Python syntax: the star on the `*path` makes the function variadic, so it can be
+called with multiple path components as separate arguments. For example,
+`repo_path(repo, "objects", "df", "4ec9fc2ad990cb9da906a95a6eda6627d7b7b0")` is a valid call.
+The function receives `path`as a list)
+"""
+def repo_path(repo, *path):
+    """Compute path under repo's gitdir."""
+    return os.path.join(repo.gitdir, *path)
+
+"""
+The next two functions, `repo_file()`and `reop_dir()`, return and optionally create a path
+to a file or a directory respectively. The difference between them is that the file version
+only creates directories up to the last component.
+"""
+def repo_file(repo, *path, mkdir=False):
+    """
+    Same as repo_path, but create dirname(*path) if absent. For example,
+    `repo_file(r, \"refs\", \"remotes\", \"origin\", \"HEAD\")` will create 
+    `.git/refs/remotes/origin`.
+    """
+
+    if repo_dir(repo, *path[:-1], mkdir=mkdir):
+        return repo_path(repo, *path)
+
+def repo_dir(repo, *path, mkdir=False):
+    """Same as `repo_path`, but mkdir *path if absent if mkdir."""
+
+    path = repo_path(repo, *path)
+
+    if os.path.exists(path):
+        if (os.path.isdir(path)):
+            return path
+        else:
+            raise Exception(f"Not a directory {path}")
+
+    if mkdir:
+        os.makedirs(path)
+        return path
+    else:
+        return None
+
+"""
+To create a new repository, we start with a directory (which we create if it doesn't already
+exist) and create the git directory inside (which must not exist already, or be empty). That
+directory is called `.git` (the leading period makes it "hidden" on Unix systems), and contains:
+- `.git/objects/`: the object store, which we'll introduce in the next section.
+- `.git/refs/` the reference store, which we'll discuss a bit later. It contains two subdirectories,
+`heads` and `tags`.
+- `.git/HEAD`, a reference to the current `HEAD` (more on that later!)
+- `.git/config`, the repository's configuration file.
+- `.git/description`, holds a free-form description of this respository's contents, for humans, and
+is rarely used.
+"""
+def repo_create(path):
+    """Create a new repository at `path`."""
+
+    repo = GitRepository(path, True)
+
+    # First, we make sure the `path` either doesn't exist or is an
+    # empty dir.
+
+    if os.path.exists(repo.worktree):
+        if not os.path.isdir(repo.worktree):
+            raise Exception (f"{path} is not a directory!")
+        if os.path.exists(repo.gitdir) and os.listdir(repo.gitdir):
+            raise Exception (f"{path} is not empty!")
+    else:
+        os.makedirs(repo.worktree)
+
+    assert repo_dir(repo, "branches", mkdir=True)
+    assert repo_dir(repo, "objects", mkdir=True)
+    assert repo_dir(repo, "refs", "tags", mkdir=True)
+    assert repo_dir(repo, "refs", "heads", mkdir=True)
+
+    # .git/description
+    with open(repo_file(repo, "description"), "w") as f:
+        f.write("Unnamed repository; edit this file 'description' to name the repository.\n")
+
+    # .git/HEAD
+    with open(repo_file(repo, "HEAD"), "w") as f:
+        f.write("refL refs/heads/master\n")
+
+    with open(repo_file(repo, "config"), "w") as f:
+        config = repo_default_config()
+        config.write(f)
+
+    return repo
+
+"""
+The configuration file is very simple, it's a INI-like file with a single section
+(`[core]`) and three fields:
+- `repositoryformatversion = 0`: the version of the gitdir format. 0 means the 
+initial format, 1 the same with extensions. If > 1, git will panic; wyag will only
+accept 0.
+- `filemode = false`: disable tracking of file modes (permissions) changes in the
+work tree.
+- `bare = false`: indicates that this repository has a worktree. Git supports an optional
+`worktree` key which indicates the location of the worktree, if not `..`; wyag doesn't.
+
+We create this file using Python's `configparser` lib:
+"""
+def repo_default_config():
+    ret = configparser.ConfigParser()
+
+    ret.add_section("core")
+    ret.set("core", "repositoryformatversion", "0")
+    ret.set("core", "filemode", "false")
+    ret.set("core", "bare", "false")
+
+    return set
+
+"""
+The syntax of `wyag init` is going to be:
+```
+wyag init [path]
+```
+
+We already have the complete repository creation logic. To create the command, we're
+only going to need two more things:
+1. We need to create an argparse subparser to handle our command's argument.
+"""
+argsp = argsubparsers.add_parser("init", help="Initialize a new, empty repository.")
+
+"""
+In the case of `init`, there's a single, optional, positional argument: the path where
+to init the repo. It defaults to `.`, the current directory:
+"""
+argsp.add_argument(
+    "path",
+    metavar="directory",
+    nargs="?",
+    default=".",
+    help="Where to create the repository."
+)
+
+"""
+2. We also need a "bridge" function that will read argument values from the object
+returned by argparse and call the actual function with correct values.
+"""
+def cmd_init(args):
+    repo_create(args.path)
