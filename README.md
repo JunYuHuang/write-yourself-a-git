@@ -4,16 +4,16 @@ A following of [Write yourself a Git!](https://wyag.thb.lt/#intro)
 
 ## Chapters completed:
 
-- [ ] Introduction
-- [ ] Getting Started
-- [ ] Creating repositories: init
-- [ ] Reading and writing objects: hash-object and cat-file
-- [ ] Reading commit history: log
-- [ ] Reading commit data: checkout
-- [ ] Refs, tags and branches
-- [ ] Working with the staging area and the index file
-- [ ] Staging area and index, part 2: staging and committing
-- [ ] Final words
+- [x] 1. Introduction
+- [x] 2. Getting Started
+- [ ] 3. Creating repositories: init
+- [ ] 4. Reading and writing objects: hash-object and cat-file
+- [ ] 5. Reading commit history: log
+- [ ] 6. Reading commit data: checkout
+- [ ] 7. Refs, tags and branches
+- [ ] 8. Working with the staging area and the index file
+- [ ] 9. Staging area and index, part 2: staging and committing
+- [ ] 10. Final words
 
 ## Git features to implement:
 
