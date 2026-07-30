@@ -11,3 +11,14 @@
     /.git
         config
 ```
+
+## Ch.5 Reading commit history: log
+
+- git commit = SHA-1 hash value of (
+    tree object + 
+    0 or more parents +
+    author (name & email) & timestamp +
+    commiter (name & emaiL) & timestamp +
+    optional PGP signature +
+    message
+)

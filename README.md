@@ -27,10 +27,10 @@ wyag init [path]
 - [x] `cat-file`
 - [ ] `check-ignore`
 - [ ] `checkout`
-- [ ] `commit`
+- [x] `commit`
 - [x] `hash-object`
 - [x] `init`
-- [ ] `log`
+- [x] `log`
 - [ ] `ls-files`
 - [ ] `ls-tree`
 - [ ] `rev-parse`
