@@ -24,7 +24,7 @@ wyag init [path]
 ## Git features to implement:
 
 - [ ] `add`
-- [ ] `cat-file`
+- [x] `cat-file`
 - [ ] `check-ignore`
 - [ ] `checkout`
 - [ ] `commit`

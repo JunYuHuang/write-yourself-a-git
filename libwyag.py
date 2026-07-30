@@ -281,3 +281,194 @@ def repo_find(path=".", required=True):
     
     # Recursive case
     return repo_find(parent, required)
+
+"""
+...`hash-object` converts an existing file into a git object, and `cat-file`
+prints an existing git object to the standard output.
+
+...you don't modify a file in git, you create a new file in a different 
+location. [Git] Objects are just that: files in the git repository, whose paths
+are determined by their contents.
+
+Because it computes keys from data, Git would rather be called a value-value store.
+
+How git stores objects:
+1. object contents -> SHA-1 hash function -> hash-value
+2. directory name = hash-value[0..2]
+3. file name = hash-value[3..-1]
+
+Object storage format = header + contents
+- header = object type + space char + size + null
+- object types: `blob`, `commit`, `tag`, `tree`
+- e.g., |commit 1086.tree|
+    - header type = `commit`
+    - space char = ` `
+    - object size = 1086 Bytes
+    - null = `.`
+    - start of object content = `tree`
+- object headers and contents are compressed with `zlib`
+"""
+
+class GitObject (object):
+
+    def __init__(self, data=None):
+        if data != None:
+            self.deserialize(data)
+        else:
+            self.init()
+    
+    def serialize(self, repo):
+        """
+        This function MUST be implemented by subclasses.
+        It must read the object's contents from self.data, a byte string,
+        and do whatever it takes to convert it into a meaningful representation.
+        What exactly that means depend on each subclass.
+        """
+        raise Exception("Unimplemented!")
+    
+    def deserialize(self, data):
+        raise Exception("Unimplemented!")
+
+    def init(self):
+        pass # Just do nothing. This is a reasonable default!
+
+"""
+Object reading pipeline:
+-> object
+-> SHA-1 hash function
+-> object hash-value
+-> path = `hash-value[0..2]/hash-value[3..-1]`
+-> read path as binary file
+-> decompress path via `zlib`
+    -> object type -> use correct subclass
+    -> object size -> recorded size equals real size?
+-> create object from file opened from path
+"""
+def object_read(repo, sha):
+    """
+    Read object sha from Git repository repo. Return a GitObject
+    whose exact type depends on the object.
+    """
+
+    path = repo_file(repo, "objects", sha[0:2], sha[2:])
+
+    if not os.path.isfile(path):
+        return None
+
+    with open (path, "rb") as f:
+        raw = zlib.decompress(f.read())
+
+        # Read object type
+        x = raw.find(b' ')
+        fmt = raw[0:x]
+
+        # Read and validate object size
+        y = raw.find(b'\x00', x)
+        size = int(raw[x:y].decode("ascii"))
+        if size != len(raw)-y-1:
+            raise Exception(f"Malformed object {sha}: bad length")
+
+        # Pick constructor
+        match fmt:
+            case b'commit'  : c=GitCommit
+            case b'tree'    : c=GitTree
+            case b'tag'     : c=GitTag
+            case b'blob'    : c=GitBlob
+            case _:
+                raise Exception(f"Unknown type {fmt.decode('ascii')} for object {sha}")
+        
+        # Call constructor and return object
+        return c(raw[y+1:])
+
+"""
+Writing an object is reading it in reverse: we compute the hash, insert the header, 
+zlib-compress everything and write the result in the correct location. This really
+shouldn't require much explanation, just notice that the hash is computed after the
+header is added (so it's the hash of the object iself, uncompressed, not just its
+contents).
+"""
+def object_write(obj, repo=None):
+    # Serialize object data
+    data = obj.serialize()
+    # Add header
+    result = obj.fmt + b' ' + str(len(data)).encode() + b'\x00' + data
+    # Compute hash
+    sha = hashlib.sha1(result).hexdigest()
+
+    if repo:
+        # Compute path
+        path=repo_path(repo, "objects", sha[0:2], sha[2:], mkdir=True)
+
+        if not os.path.exists(path):
+            with open(path, 'wb') as f:
+                # Compress and write
+                f.write(zlib.compress(result))
+    return sha
+
+"""
+Blobs are unformatted, unspecified user data (e.g., `main.c`, `logo.png`, etc.).
+Creating a `GitBlob` class is thus trivial, the `serialize`and `deserialize` functions
+just have to store and return their input unmodified.
+"""
+class GitBlob(GitObject):
+    fmt=b'blob'
+
+    def serialize(self):
+        return self.blobdata
+
+    def serialize(self, data):
+        self.blobdata = data
+
+"""
+`git cat-file` simply prints the raw contents of an object to stdout, uncompressed
+and without the git header.
+
+Our simplified version will ust take those two position arguments: a type and an 
+object identifier:
+```
+wyag cat-file TYPE OBJECT
+```
+"""
+argsp = argsubparsers.add_parser(
+    "cat-file",
+    help="Provide content of repository objects"
+)
+
+argsp.add_argument(
+    "type",
+    metavar="type",
+    choices=["blob", "commit", "tag", "tree"],
+    help="Specify the type"
+)
+
+argsp.add_argument(
+    "object",
+    metavar="object",
+    help="The object to display"
+)
+
+def cmd_cat_file(args):
+    repo = repo_find()
+    cat_file(repo, args.object, fmt=args.type.encoed())
+
+def cat_file(repo, obj, fmt=None):
+    obj = object_read(repo, object_find(repo, obj, fmt=fmt))
+    sys.stdout.buffer.write(obj.serialize())
+
+"""
+The reason for this strange small function is that Git has a lot of ways to
+refer to objects: full hash, short hash, tags...`object_find()` will be our name
+resolution function. We'll only implement it later, so this is just a temporary
+placeholder. This means that until we implement the real thing, the only way we can
+refer to an object will be by its full hash.
+"""
+def object_find(repo, name, fmt=None, follow=True):
+    return name
+
+"""
+`hash-object`is basically the opposite of `cat-file`: it reads a file, computes its 
+hash as an object, either storing it in the repository (if the -w flag is passed) or
+just printing its hash.
+
+The syntax of `wyag hash-object`is a simplification of `git hash-object`:
+"""
