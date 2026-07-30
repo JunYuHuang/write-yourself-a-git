@@ -12,7 +12,7 @@ wyag init [path]
 
 - [x] 1. Introduction
 - [x] 2. Getting Started
-- [ ] 3. Creating repositories: init
+- [x] 3. Creating repositories: init
 - [ ] 4. Reading and writing objects: hash-object and cat-file
 - [ ] 5. Reading commit history: log
 - [ ] 6. Reading commit data: checkout
